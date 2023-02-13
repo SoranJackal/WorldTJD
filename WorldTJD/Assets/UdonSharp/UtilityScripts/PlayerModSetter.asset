@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
   m_Name: PlayerModSetter
   m_EditorClassIdentifier: 
-  serializedUdonProgramAsset: {fileID: 11400000, guid: f938e6c4ff027a74da405a1f9353fd2b,
+  serializedUdonProgramAsset: {fileID: 11400000, guid: 2c3b1674d8e39ac4a9db1c4ce5633257,
     type: 2}
   udonAssembly: 
   assemblyError: 
-  sourceCsScript: {fileID: 11500000, guid: b8c59fc0a015dcc4b86d7e90312acf63, type: 3}
+  sourceCsScript: {fileID: 11500000, guid: 6cca2c0edd680f7469b093b6e7efdb54, type: 3}
   scriptVersion: 2
   compiledVersion: 2
   behaviourSyncMode: 2
