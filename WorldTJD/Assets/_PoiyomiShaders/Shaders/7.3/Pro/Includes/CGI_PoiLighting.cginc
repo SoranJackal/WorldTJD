@@ -631,8 +631,8 @@ void calculateBasePassLightMaps()
         poiLight.rampedLightMap = 1 - smoothstep(0, .5, 1 - poiLight.lightMap);
         poiLight.finalLighting = directLighting;
         
-        indirectLighting = max(indirectLighting, 0);
-        directLighting = max(directLighting, 0);
+        indirectLighting = max(indirectLighting,0);
+        directLighting = max(directLighting,0);
 
         /*
         * Create Gradiant Maps
@@ -651,6 +651,7 @@ void calculateBasePassLightMaps()
                 else
                 {
                     poiLight.finalLighting = lerp(indirectLighting * poiLight.occlusion, directLighting, poiLight.rampedLightMap);
+
                 }
             }
             break;
@@ -685,278 +686,296 @@ void calculateBasePassLightMaps()
         
         // DJL stuff
         if (_LightingMode == 2) // Wrapped
-        {
-            poiLight.directLighting = (_LightColor0.rgb) * saturate(RTWrapFunc(poiLight.nDotL, _LightingWrappedWrap, _LightingWrappedNormalization)) * detailShadow * lerp(1, poiLight.attenuation, _AttenuationMultiplier);
-            poiLight.indirectLighting = ShadeSH9_wrapped(poiMesh.normals[_LightingIndirectColorMode], _LightingWrappedWrap) * poiLight.occlusion;
 
-            float3 ShadeSH9Plus_2 = GetSHMaxL1();
-            float bw_topDirectLighting_2 = dot(_LightColor0.rgb, grayscale_vector);
-            float bw_directLighting = dot(poiLight.directLighting, grayscale_vector);
-            float bw_indirectLighting = dot(poiLight.indirectLighting, grayscale_vector);
-            float bw_topIndirectLighting = dot(ShadeSH9Plus_2, grayscale_vector);
+        {
+            float wrap = _LightingWrappedWrap;
             
-            //poiLight.lightMap = saturate(dot(poiLight.indirectLighting + poiLight.directLighting, grayscale_vector));
-            poiLight.lightMap = smoothstep(0, bw_topIndirectLighting + bw_topDirectLighting_2, bw_indirectLighting + bw_directLighting);
+            float3 directcolor = (_LightColor0.rgb) * saturate(RTWrapFunc(poiLight.nDotL, wrap, _LightingWrappedNormalization));
+            float directatten = lerp(1, poiLight.attenuation, _AttenuationMultiplier);
             
-            poiLight.rampedLightMap = 1;
-            UNITY_BRANCH
-            if (_LightingRampType == 0) // Ramp Texture
+            uint normalsindex = _LightingIndirectColorMode > 0 ? 1: 0;
+            // if (_LightingIndirectColorMode == 1)
+            // {
+                //     surfnormals = poiMesh.normals[1];
+                // }
+                // else
+                // {
+                    //     surfnormals = poiMesh.normals[0];
+                    // }
+                    float3 envlight = ShadeSH9_wrapped(poiMesh.normals[normalsindex], wrap);
+                    envlight *= poiLight.occlusion;
+                    
+                    poiLight.directLighting = directcolor * detailShadow * directatten;
+                    poiLight.indirectLighting = envlight;
+                    
 
-            {
-                poiLight.rampedLightMap = lerp(1, UNITY_SAMPLE_TEX2D(_ToonRamp, poiLight.lightMap + _ShadowOffset).rgb, shadowStrength.r);
-            }
-            else if (_LightingRampType == 1) // Math Gradient
+                    float3 ShadeSH9Plus_2 = GetSHMaxL1();
+                    float bw_topDirectLighting_2 = dot(_LightColor0.rgb, grayscale_vector);
+                    float bw_directLighting = dot(poiLight.directLighting, grayscale_vector);
+                    float bw_indirectLighting = dot(poiLight.indirectLighting, grayscale_vector);
+                    float bw_topIndirectLighting = dot(ShadeSH9Plus_2, grayscale_vector);
+                    
+                    //poiLight.lightMap = saturate(dot(poiLight.indirectLighting + poiLight.directLighting, grayscale_vector));
+                    poiLight.lightMap = smoothstep(0, bw_topIndirectLighting + bw_topDirectLighting_2, bw_indirectLighting + bw_directLighting);
+                    
+                    poiLight.rampedLightMap = 1;
+                    UNITY_BRANCH
+                    if (_LightingRampType == 0) // Ramp Texture
 
-            {
-                poiLight.rampedLightMap = lerp(_LightingShadowColor * lerp(poiLight.indirectLighting, 1, _LightingIgnoreAmbientColor), float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - poiLight.lightMap)));
-                poiLight.rampedLightMap = lerp(float3(1, 1, 1), poiLight.rampedLightMap, shadowStrength.r);
-            }
-            
-            poiLight.finalLighting = (poiLight.indirectLighting + poiLight.directLighting) * saturate(poiLight.rampedLightMap + 1 - _ShadowStrength);
-        }
-        
-        if (!_LightingUncapped)
-        {
-            poiLight.finalLighting = saturate(poiLight.finalLighting);
-        }
-        //poiLight.finalLighting *= .8;
-    #endif
-}
+                    {
+                        poiLight.rampedLightMap = lerp(1, UNITY_SAMPLE_TEX2D(_ToonRamp, poiLight.lightMap + _ShadowOffset).rgb, shadowStrength.r);
+                    }
+                    else if (_LightingRampType == 1) // Math Gradient
 
-/*
-void applyShadowTexture(inout float4 albedo)
-{
-    UNITY_BRANCH
-    if (_UseShadowTexture && _LightingRampType == 1)
-    {
-        albedo.rgb = lerp(albedo.rgb, POI2D_SAMPLER_PAN(_LightingShadowTexture, _MainTex, poiMesh.uv[_LightingShadowTextureUV], _LightingShadowTexturePan) * _LightingShadowColor, (1 - poiLight.rampedLightMap) * shadowStrength);
-    }
-}
-*/
-
-float3 calculateNonImportantLighting(float attenuation, float attenuationDotNL, float3 albedo, float3 lightColor, half dotNL, half correctedDotNL)
-{
-    fixed detailShadow = 1;
-    UNITY_BRANCH
-    if (_LightingDetailShadowsEnabled)
-    {
-        detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingAdditiveDetailStrength).r;
-    }
-    UNITY_BRANCH
-    if (_LightingAdditiveType == 0)
-    {
-        return lightColor * attenuationDotNL * detailShadow; // Realistic
-
-    }
-    else if (_LightingAdditiveType == 1) // Toon
-
-    {
-        return lerp(lightColor * attenuation, lightColor * _LightingAdditivePassthrough * attenuation, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, dotNL)) * detailShadow;
-    }
-    else //if(_LightingAdditiveType == 2) // Wrapped
-
-    {
-        float uv = saturate(RTWrapFunc(-dotNL, _LightingWrappedWrap, _LightingWrappedNormalization)) * detailShadow;
-        
-        poiLight.rampedLightMap = 1;
-        if (_LightingRampType == 1) // Math Gradient
-        poiLight.rampedLightMap = lerp(_LightingShadowColor, float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - uv)));
-        // TODO: ramp texture or full shade/tint map for atlasing
-        
-        return lightColor * poiLight.rampedLightMap * saturate(attenuation * uv);
-    }
-}
-
-void applyShadeMaps(inout float4 albedo)
-{
-    UNITY_BRANCH
-    if (_LightingRampType == 2)
-    {
-        float3 baseColor = albedo.rgb;
-        
-        float MainColorFeatherStep = _BaseColor_Step - _BaseShade_Feather;
-        float firstColorFeatherStep = _ShadeColor_Step - _1st2nd_Shades_Feather;
-        
-        #if defined(PROP_1ST_SHADEMAP) || !defined(OPTIMIZER_ENABLED)
-            float4 firstShadeMap = POI2D_SAMPLER_PAN(_1st_ShadeMap, _MainTex, poiMesh.uv[_1st_ShadeMapUV], _1st_ShadeMapPan);
-        #else
-            float4 firstShadeMap = float4(1, 1, 1, 1);
-        #endif
-        firstShadeMap = lerp(firstShadeMap, albedo, _Use_BaseAs1st);
-        
-        #if defined(PROP_2ND_SHADEMAP) || !defined(OPTIMIZER_ENABLED)
-            float4 secondShadeMap = POI2D_SAMPLER_PAN(_2nd_ShadeMap, _MainTex, poiMesh.uv[_2nd_ShadeMapUV], _2nd_ShadeMapPan);
-        #else
-            float4 secondShadeMap = float4(1, 1, 1, 1);
-        #endif
-        secondShadeMap = lerp(secondShadeMap, firstShadeMap, _Use_1stAs2nd);
-        
-        firstShadeMap.rgb *= _1st_ShadeColor.rgb; //* lighColor
-        secondShadeMap.rgb *= _2nd_ShadeColor.rgb; //* LightColor;
-        
-        float shadowMask = 1;
-        shadowMask *= _Use_1stShadeMapAlpha_As_ShadowMask ?(_1stShadeMapMask_Inverse ?(1.0 - firstShadeMap.a) : firstShadeMap.a) : 1;
-        shadowMask *= _Use_2ndShadeMapAlpha_As_ShadowMask ?(_2ndShadeMapMask_Inverse ?(1.0 - secondShadeMap.a) : secondShadeMap.a) : 1;
-        
-        float mainShadowMask = saturate(1 - ((poiLight.lightMap) - MainColorFeatherStep) / (_BaseColor_Step - MainColorFeatherStep) * (shadowMask));
-        float firstSecondShadowMask = saturate(1 - ((poiLight.lightMap) - firstColorFeatherStep) / (_ShadeColor_Step - firstColorFeatherStep) * (shadowMask));
-        
-        #if defined(PROP_LIGHTINGSHADOWMASK) || !defined(OPTIMIZER_ENABLED)
-            float removeShadow = POI2D_SAMPLER_PAN(_LightingShadowMask, _MainTex, poiMesh.uv[_LightingShadowMaskUV], _LightingShadowMaskPan).r;
-        #else
-            float removeShadow = 1;
-        #endif
-        mainShadowMask *= removeShadow;
-        firstSecondShadowMask *= removeShadow;
-        
-        albedo.rgb = lerp(albedo.rgb, lerp(firstShadeMap.rgb, secondShadeMap.rgb, firstSecondShadowMask), mainShadowMask);
-    }
-}
-
-float3 calculateFinalLighting(inout float3 albedo, float4 finalColor)
-{
-    float3 finalLighting = 1;
-    // Additive Lighting
-    #ifdef FORWARD_ADD_PASS
-        fixed detailShadow = 1;
-        UNITY_BRANCH
-        if (_LightingDetailShadowsEnabled)
-        {
-            detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingAdditiveDetailStrength).r;
-        }
-        UNITY_BRANCH
-        if (_LightingAdditiveType == 0) // Realistic
-
-        {
-            finalLighting = poiLight.color * poiLight.attenuation * max(0, poiLight.nDotL) * detailShadow * poiLight.additiveShadow;
-        }
-        else if (_LightingAdditiveType == 1) // Toon
-
-        {
-            #if defined(POINT) || defined(SPOT)
-                finalLighting = lerp(poiLight.color * max(poiLight.additiveShadow, _LightingAdditivePassthrough), poiLight.color * _LightingAdditivePassthrough, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, 1 - (.5 * poiLight.nDotL + .5))) * poiLight.attenuation * detailShadow;
-            #else
-                finalLighting = lerp(poiLight.color * max(poiLight.attenuation, _LightingAdditivePassthrough), poiLight.color * _LightingAdditivePassthrough, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, 1 - (.5 * poiLight.nDotL + .5))) * detailShadow;
-            #endif
-        }
-        else //if(_LightingAdditiveType == 2) // Wrapped
-
-        {
-            float uv = saturate(RTWrapFunc(poiLight.nDotL, _LightingWrappedWrap, _LightingWrappedNormalization)) * detailShadow;
-            
-            poiLight.rampedLightMap = 1;
-            UNITY_BRANCH
-            if (_LightingRampType == 1) // Math Gradient
-            poiLight.rampedLightMap = lerp(_LightingShadowColor, float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - uv)));
-            // TODO: ramp texture or full shade/tint map for atlasing
-            //poiLight.rampedLightMap = lerp(1, UNITY_SAMPLE_TEX2D(_ToonRamp, float2(uv + _ShadowOffset, 1)), shadowStrength.r);
-            
-            float shadowatten = max(poiLight.additiveShadow, _LightingAdditivePassthrough);
-            return poiLight.color * poiLight.rampedLightMap * saturate(poiLight.attenuation * uv * shadowatten);
-        }
-    #endif
-    
-    // Base and Meta Lighting
-    #if defined(FORWARD_BASE_PASS) || defined(POI_META_PASS)
-        #ifdef VERTEXLIGHT_ON
-            poiLight.vFinalLighting = 0;
-            
-            for (int index = 0; index < 4; index++)
-            {
-                poiLight.vFinalLighting += calculateNonImportantLighting(poiLight.vAttenuation[index], poiLight.vAttenuationDotNL[index], albedo, poiLight.vColor[index], poiLight.vDotNL[index], poiLight.vCorrectedDotNL[index]);
-            }
-        #endif
-        
-        switch(_LightingMode)
-        {
-            case 0: // Toon Lighting
-            case 2: // or wrapped
-
-            {
-                // HSL Shading
-                UNITY_BRANCH
-                if (_LightingEnableHSL)
-                {
-                    float3 HSLMod = float3(_LightingShadowHue * 2 - 1, _LightingShadowSaturation * 2 - 1, _LightingShadowLightness * 2 - 1) * (1 - poiLight.rampedLightMap);
-                    albedo = lerp(albedo.rgb, ModifyViaHSL(albedo.rgb, HSLMod), _LightingHSLIntensity);
+                    {
+                        poiLight.rampedLightMap = lerp(_LightingShadowColor * lerp(poiLight.indirectLighting, 1, _LightingIgnoreAmbientColor), float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - poiLight.lightMap)));
+                        poiLight.rampedLightMap = lerp(float3(1, 1, 1), poiLight.rampedLightMap, shadowStrength.r);
+                    }
+                    
+                    poiLight.finalLighting = (poiLight.indirectLighting + poiLight.directLighting) * saturate(poiLight.rampedLightMap + 1 - _ShadowStrength);
                 }
                 
-                // Normal Shading
-                UNITY_BRANCH
-                if (_LightingMinLightBrightness > 0)
+                if (!_LightingUncapped)
                 {
-                    poiLight.finalLighting = max(0.001, poiLight.finalLighting);
-                    float finalluminance = calculateluminance(poiLight.finalLighting);
-                    finalLighting = max(poiLight.finalLighting, poiLight.finalLighting / max(0.0001, (finalluminance / _LightingMinLightBrightness)));
-                    poiLight.finalLighting = finalLighting;
+                    poiLight.finalLighting = saturate(poiLight.finalLighting);
                 }
-                else
-                {
-                    finalLighting = poiLight.finalLighting;
-                }
+                //poiLight.finalLighting *= .8;
+            #endif
+        }
+        
+        /*
+        void applyShadowTexture(inout float4 albedo)
+        {
+            UNITY_BRANCH
+            if (_UseShadowTexture && _LightingRampType == 1)
+            {
+                albedo.rgb = lerp(albedo.rgb, POI2D_SAMPLER_PAN(_LightingShadowTexture, _MainTex, poiMesh.uv[_LightingShadowTextureUV], _LightingShadowTexturePan) * _LightingShadowColor, (1 - poiLight.rampedLightMap) * shadowStrength);
             }
-            break;
-            case 1: // realistic
+        }
+        */
+        
+        float3 calculateNonImportantLighting(float attenuation, float attenuationDotNL, float3 albedo, float3 lightColor, half dotNL, half correctedDotNL)
+        {
+            fixed detailShadow = 1;
+            UNITY_BRANCH
+            if (_LightingDetailShadowsEnabled)
+            {
+                detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingAdditiveDetailStrength).r;
+            }
+            UNITY_BRANCH
+            if (_LightingAdditiveType == 0)
+            {
+                return lightColor * attenuationDotNL * detailShadow; // Realistic
+            }
+            else if (_LightingAdditiveType == 1) // Toon
 
             {
+                return lerp(lightColor * attenuation, lightColor * _LightingAdditivePassthrough * attenuation, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, dotNL)) * detailShadow;
+            }
+            else //if(_LightingAdditiveType == 2) // Wrapped
+
+            {
+                float uv = saturate(RTWrapFunc(-dotNL, _LightingWrappedWrap, _LightingWrappedNormalization)) * detailShadow;
+                
+                poiLight.rampedLightMap = 1;
+                if (_LightingRampType == 1) // Math Gradient
+                poiLight.rampedLightMap = lerp(_LightingShadowColor, float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - uv)));
+                // TODO: ramp texture or full shade/tint map for atlasing
+                
+                return lightColor * poiLight.rampedLightMap * saturate(attenuation * uv);
+            }
+        }
+        
+        void applyShadeMaps(inout float4 albedo)
+        {
+            UNITY_BRANCH
+            if (_LightingRampType == 2)
+            {
+                float3 baseColor = albedo.rgb;
+                
+                float MainColorFeatherStep = _BaseColor_Step - _BaseShade_Feather;
+                float firstColorFeatherStep = _ShadeColor_Step - _1st2nd_Shades_Feather;
+                
+                #if defined(PROP_1ST_SHADEMAP) || !defined(OPTIMIZER_ENABLED)
+                    float4 firstShadeMap = POI2D_SAMPLER_PAN(_1st_ShadeMap, _MainTex, poiMesh.uv[_1st_ShadeMapUV], _1st_ShadeMapPan);
+                #else
+                    float4 firstShadeMap = float4(1, 1, 1, 1);
+                #endif
+                firstShadeMap = lerp(firstShadeMap, albedo, _Use_BaseAs1st);
+                
+                #if defined(PROP_2ND_SHADEMAP) || !defined(OPTIMIZER_ENABLED)
+                    float4 secondShadeMap = POI2D_SAMPLER_PAN(_2nd_ShadeMap, _MainTex, poiMesh.uv[_2nd_ShadeMapUV], _2nd_ShadeMapPan);
+                #else
+                    float4 secondShadeMap = float4(1, 1, 1, 1);
+                #endif
+                secondShadeMap = lerp(secondShadeMap, firstShadeMap, _Use_1stAs2nd);
+                
+                firstShadeMap.rgb *= _1st_ShadeColor.rgb; //* lighColor
+                secondShadeMap.rgb *= _2nd_ShadeColor.rgb; //* LightColor;
+                
+                float shadowMask = 1;
+                shadowMask *= _Use_1stShadeMapAlpha_As_ShadowMask ?(_1stShadeMapMask_Inverse ?(1.0 - firstShadeMap.a): firstShadeMap.a): 1;
+                shadowMask *= _Use_2ndShadeMapAlpha_As_ShadowMask ?(_2ndShadeMapMask_Inverse ?(1.0 - secondShadeMap.a): secondShadeMap.a): 1;
+                
+                float mainShadowMask = saturate(1 - ((poiLight.lightMap) - MainColorFeatherStep) / (_BaseColor_Step - MainColorFeatherStep) * (shadowMask));
+                float firstSecondShadowMask = saturate(1 - ((poiLight.lightMap) - firstColorFeatherStep) / (_ShadeColor_Step - firstColorFeatherStep) * (shadowMask));
+                
+                #if defined(PROP_LIGHTINGSHADOWMASK) || !defined(OPTIMIZER_ENABLED)
+                    float removeShadow = POI2D_SAMPLER_PAN(_LightingShadowMask, _MainTex, poiMesh.uv[_LightingShadowMaskUV], _LightingShadowMaskPan).r;
+                #else
+                    float removeShadow = 1;
+                #endif
+                mainShadowMask *= removeShadow;
+                firstSecondShadowMask *= removeShadow;
+                
+                albedo.rgb = lerp(albedo.rgb, lerp(firstShadeMap.rgb, secondShadeMap.rgb, firstSecondShadowMask), mainShadowMask);
+            }
+        }
+        
+        float3 calculateFinalLighting(inout float3 albedo, float4 finalColor)
+        {
+            float3 finalLighting = 1;
+            // Additive Lighting
+            #ifdef FORWARD_ADD_PASS
                 fixed detailShadow = 1;
                 UNITY_BRANCH
                 if (_LightingDetailShadowsEnabled)
                 {
-                    detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingDetailStrength).r;
+                    detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingAdditiveDetailStrength).r;
                 }
-                
-                float3 realisticLighting = calculateRealisticLighting(finalColor, detailShadow).rgb;
-                finalLighting = lerp(realisticLighting, dot(realisticLighting, float3(0.299, 0.587, 0.114)), _LightingMonochromatic);
-            }
-            break;
-            case 3: // Skin
+                UNITY_BRANCH
+                if (_LightingAdditiveType == 0) // Realistic
 
-            {
-                float subsurfaceShadowWeight = 0.0h;
-                float3 ambientNormalWorld = poiMesh.normals[1];//aTangentToWorld(s, s.blurredNormalTangent);
+                {
+                    finalLighting = poiLight.color * poiLight.attenuation * max(0, poiLight.nDotL) * detailShadow * poiLight.additiveShadow;
+                }
+                else if (_LightingAdditiveType == 1) // Toon
+
+                {
+                    #if defined(POINT) || defined(SPOT)
+                        finalLighting = lerp(poiLight.color * max(poiLight.additiveShadow, _LightingAdditivePassthrough), poiLight.color * _LightingAdditivePassthrough, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, 1 - (.5 * poiLight.nDotL + .5))) * poiLight.attenuation * detailShadow;
+                    #else
+                        finalLighting = lerp(poiLight.color * max(poiLight.attenuation, _LightingAdditivePassthrough), poiLight.color * _LightingAdditivePassthrough, smoothstep(_LightingAdditiveGradientStart, _LightingAdditiveGradientEnd, 1 - (.5 * poiLight.nDotL + .5))) * detailShadow;
+                    #endif
+                }
+                else //if(_LightingAdditiveType == 2) // Wrapped
+
+                {
+                    float uv = saturate(RTWrapFunc(poiLight.nDotL, _LightingWrappedWrap, _LightingWrappedNormalization)) * detailShadow;
+                    
+                    poiLight.rampedLightMap = 1;
+                    UNITY_BRANCH
+                    if (_LightingRampType == 1) // Math Gradient
+                    poiLight.rampedLightMap = lerp(_LightingShadowColor, float3(1, 1, 1), saturate(1 - smoothstep(_LightingGradientStart - .000001, _LightingGradientEnd, 1 - uv)));
+                    // TODO: ramp texture or full shade/tint map for atlasing
+                    //poiLight.rampedLightMap = lerp(1, UNITY_SAMPLE_TEX2D(_ToonRamp, float2(uv + _ShadowOffset, 1)), shadowStrength.r);
+                    
+                    float shadowatten = max(poiLight.additiveShadow, _LightingAdditivePassthrough);
+                    return poiLight.color * poiLight.rampedLightMap * saturate(poiLight.attenuation * uv * shadowatten);
+                }
+            #endif
+            
+            // Base and Meta Lighting
+            #if defined(FORWARD_BASE_PASS) || defined(POI_META_PASS)
+                #ifdef VERTEXLIGHT_ON
+                    poiLight.vFinalLighting = 0;
+                    
+                    for (int index = 0; index < 4; index++)
+                    {
+                        poiLight.vFinalLighting += calculateNonImportantLighting(poiLight.vAttenuation[index], poiLight.vAttenuationDotNL[index], albedo, poiLight.vColor[index], poiLight.vDotNL[index], poiLight.vCorrectedDotNL[index]);
+                    }
+                #endif
                 
-                // Scattering mask.
-                float subsurface = 1;
-                float skinScatteringMask = _SssWeight * saturate(1.0h / _SssMaskCutoff * subsurface);
-                float skinScattering = saturate(subsurface * _SssScale * 2 + _SssBias);
-                
-                // Skin subsurface depth absorption tint.
-                // cf http://www.crytek.com/download/2014_03_25_CRYENGINE_GDC_Schultz.pdf pg 35
-                half3 absorption = exp((1.0h - subsurface) * _SssTransmissionAbsorption.rgb);
-                
-                // Albedo scale for absorption assumes ~0.5 luminance for Caucasian skin.
-                absorption *= saturate(finalColor.rgb * unity_ColorSpaceDouble.rgb);
-                
-                // Blurred normals for indirect diffuse and direct scattering.
-                ambientNormalWorld = normalize(lerp(poiMesh.normals[1], ambientNormalWorld, _SssBumpBlur));
-                
-                float ndlBlur = dot(poiMesh.normals[1], poiLight.direction) * 0.5h + 0.5h;
-                float lumi = dot(poiLight.color, half3(0.2126h, 0.7152h, 0.0722h));
-                float4 sssLookupUv = float4(ndlBlur, skinScattering * lumi, 0.0f, 0.0f);
-                half3 sss = poiLight.lightMap * poiLight.attenuation * tex2Dlod(_SkinLUT, sssLookupUv).rgb;
-                finalLighting = min(lerp(indirectLighting * _LightingShadowColor, _LightingShadowColor, _LightingIgnoreAmbientColor) + (sss * directLighting), directLighting);
-            }
-            break;
-            case 4:
-            {
-                finalLighting = directLighting;
-            }
-            break;
+                switch(_LightingMode)
+                {
+                    case 0: // Toon Lighting
+                    case 2: // or wrapped
+
+                    {
+                        // HSL Shading
+                        UNITY_BRANCH
+                        if (_LightingEnableHSL)
+                        {
+                            float3 HSLMod = float3(_LightingShadowHue * 2 - 1, _LightingShadowSaturation * 2 - 1, _LightingShadowLightness * 2 - 1) * (1 - poiLight.rampedLightMap);
+                            albedo = lerp(albedo.rgb, ModifyViaHSL(albedo.rgb, HSLMod), _LightingHSLIntensity);
+                        }
+                        
+                        // Normal Shading
+                        UNITY_BRANCH
+                        if (_LightingMinLightBrightness > 0)
+                        {
+                            poiLight.finalLighting = max(0.001, poiLight.finalLighting);
+                            float finalluminance = calculateluminance(poiLight.finalLighting);
+                            finalLighting = max(poiLight.finalLighting, poiLight.finalLighting / max(0.0001, (finalluminance / _LightingMinLightBrightness)));
+                            poiLight.finalLighting = finalLighting;
+                        }
+                        else
+                        {
+                            finalLighting = poiLight.finalLighting;
+                        }
+                    }
+                    break;
+                    case 1: // realistic
+
+                    {
+                        fixed detailShadow = 1;
+                        UNITY_BRANCH
+                        if (_LightingDetailShadowsEnabled)
+                        {
+                            detailShadow = lerp(1, POI2D_SAMPLER_PAN(_LightingDetailShadows, _MainTex, poiMesh.uv[_LightingDetailShadowsUV], _LightingDetailShadowsPan), _LightingDetailStrength).r;
+                        }
+                        
+                        float3 realisticLighting = calculateRealisticLighting(finalColor, detailShadow).rgb;
+                        finalLighting = lerp(realisticLighting, dot(realisticLighting, float3(0.299, 0.587, 0.114)), _LightingMonochromatic);
+                    }
+                    break;
+                    case 3: // Skin
+
+                    {
+                        float subsurfaceShadowWeight = 0.0h;
+                        float3 ambientNormalWorld = poiMesh.normals[1];//aTangentToWorld(s, s.blurredNormalTangent);
+                        
+                        // Scattering mask.
+                        float subsurface = 1;
+                        float skinScatteringMask = _SssWeight * saturate(1.0h / _SssMaskCutoff * subsurface);
+                        float skinScattering = saturate(subsurface * _SssScale * 2 + _SssBias);
+                        
+                        // Skin subsurface depth absorption tint.
+                        // cf http://www.crytek.com/download/2014_03_25_CRYENGINE_GDC_Schultz.pdf pg 35
+                        half3 absorption = exp((1.0h - subsurface) * _SssTransmissionAbsorption.rgb);
+                        
+                        // Albedo scale for absorption assumes ~0.5 luminance for Caucasian skin.
+                        absorption *= saturate(finalColor.rgb * unity_ColorSpaceDouble.rgb);
+                        
+                        // Blurred normals for indirect diffuse and direct scattering.
+                        ambientNormalWorld = normalize(lerp(poiMesh.normals[1], ambientNormalWorld, _SssBumpBlur));
+                        
+                        float ndlBlur = dot(poiMesh.normals[1], poiLight.direction) * 0.5h + 0.5h;
+                        float lumi = dot(poiLight.color, half3(0.2126h, 0.7152h, 0.0722h));
+                        float4 sssLookupUv = float4(ndlBlur, skinScattering * lumi, 0.0f, 0.0f);
+                        half3 sss = poiLight.lightMap * poiLight.attenuation * tex2Dlod(_SkinLUT, sssLookupUv).rgb;
+                        finalLighting = min(lerp(indirectLighting * _LightingShadowColor, _LightingShadowColor, _LightingIgnoreAmbientColor) + (sss * directLighting), directLighting);
+                    }
+                    break;
+                    case 4:
+                    {
+                        finalLighting = directLighting;
+                    }
+                    break;
+                }
+            #endif
+            return finalLighting;
+        }
+        
+        
+        void applyLighting(inout float4 finalColor, float3 finalLighting)
+        {
+            #ifdef VERTEXLIGHT_ON
+                finalColor.rgb *= finalLighting + poiLight.vFinalLighting;
+            #else
+                //finalColor.rgb = blendSoftLight(finalColor.rgb, finalLighting);
+                //finalColor.rgb *= saturate(poiLight.directLighting);
+                finalColor.rgb *= finalLighting;
+            #endif
         }
     #endif
-    return finalLighting;
-}
-
-
-void applyLighting(inout float4 finalColor, float3 finalLighting)
-{
-    #ifdef VERTEXLIGHT_ON
-        finalColor.rgb *= finalLighting + poiLight.vFinalLighting;
-    #else
-        //finalColor.rgb = blendSoftLight(finalColor.rgb, finalLighting);
-        //finalColor.rgb *= saturate(poiLight.directLighting);
-        finalColor.rgb *= finalLighting;
-    #endif
-}
-#endif

@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -340790334, guid: 67cc4cb7839cd3741b63733d5adf0442, type: 3}
+  m_Name: MainMenu
+  m_EditorClassIdentifier: 
+  controls:
+  - name: Body Controls
+    icon: {fileID: 2800000, guid: af1ba8919b0ccb94a99caf43ac36f97d, type: 3}
+    type: 103
+    parameter:
+      name: 
+    value: 1
+    style: 0
+    subMenu: {fileID: 11400000, guid: 3622c8c77695d1648a7281e5c9225e46, type: 2}
+    subParameters: []
+    labels: []
+  - name: Normal Emotes
+    icon: {fileID: 2800000, guid: 011229dd2f6f5f64f8965a08d3434654, type: 3}
+    type: 103
+    parameter:
+      name: 
+    value: 1
+    style: 0
+    subMenu: {fileID: 11400000, guid: 96b0bc53dab7c5e489f99dfa546e7a9f, type: 2}
+    subParameters: []
+    labels: []
+  - name: Dances
+    icon: {fileID: 2800000, guid: 9a20b3a6641e1af4e95e058f361790cb, type: 3}
+    type: 103
+    parameter:
+      name: 
+    value: 1
+    style: 0
+    subMenu: {fileID: 11400000, guid: ae2494fb5f4ed7f4896285377ba31075, type: 2}
+    subParameters: []
+    labels: []

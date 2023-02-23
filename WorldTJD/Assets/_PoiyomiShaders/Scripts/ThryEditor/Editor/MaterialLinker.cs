@@ -15,7 +15,7 @@ namespace Thry
             {
                 linked_materials = new Dictionary<(Material,string), List<Material>>();
                 string raw = FileHelper.ReadFileIntoString(PATH.LINKED_MATERIALS_FILE);
-                string[][] parsed = Parser.Deserialize<string[][]>(raw);
+                string[][] parsed = Parser.ParseToObject<string[][]>(raw);
                 if(parsed!=null)
                     foreach (string[] material_cloud in parsed)
                     {
@@ -51,12 +51,6 @@ namespace Thry
                 save_structre.Add(value);
             }
             FileHelper.WriteStringToFile(Parser.ObjectToString(save_structre),PATH.LINKED_MATERIALS_FILE);
-        }
-
-        public static bool IsLinked(MaterialProperty p)
-        {
-            Load();
-            return linked_materials.ContainsKey(((Material)p.targets[0], p.name));
         }
 
         public static List<Material> GetLinked(MaterialProperty p)

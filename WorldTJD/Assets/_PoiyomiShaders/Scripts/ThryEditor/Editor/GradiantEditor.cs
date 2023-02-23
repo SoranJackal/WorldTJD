@@ -17,9 +17,8 @@ namespace Thry
         public static void Open(GradientData data, MaterialProperty prop, TextureData predefinedTextureSettings, bool force_texture_options = false, bool show_texture_options=true)
         {
             texture_settings_data = LoadTextureSettings(prop, predefinedTextureSettings, force_texture_options);
-            data.Gradient = TextureHelper.GetGradient(prop.textureValue);
+            data.gradient = TextureHelper.GetGradient(prop.textureValue);
             GradientEditor window = (GradientEditor)EditorWindow.GetWindow(typeof(GradientEditor));
-            window.titleContent = new GUIContent("Gradient '" +prop.name +"' of '"+ prop.targets[0].name + "'");
             window.privious_preview_texture = prop.textureValue;
             window.prop = prop;
             window.data = data;
@@ -52,7 +51,7 @@ namespace Thry
                 return predefinedTextureSettings;
             string json_texture_settings = FileHelper.LoadValueFromFile("gradient_texture_options_"+prop.name, PATH.PERSISTENT_DATA);
             if (json_texture_settings != null)
-                return Parser.Deserialize<TextureData>(json_texture_settings);
+                return Parser.ParseToObject<TextureData>(json_texture_settings);
             else if (predefinedTextureSettings != null)
                 return predefinedTextureSettings;
             else
@@ -80,12 +79,12 @@ namespace Thry
         {
             if (gradient_has_been_edited)
             {
-                if (data.PreviewTexture.GetType() == typeof(Texture2D))
+                if (data.preview_texture.GetType() == typeof(Texture2D))
                 {
-                    string file_name = GradientFileName(data.Gradient, prop.targets[0].name);
-                    Texture saved = TextureHelper.SaveTextureAsPNG((Texture2D)data.PreviewTexture, PATH.TEXTURES_DIR+"/Gradients/" + file_name, textureSettings);
+                    string file_name = GradientFileName(data.gradient, prop.targets[0].name);
+                    Texture saved = TextureHelper.SaveTextureAsPNG((Texture2D)data.preview_texture, PATH.TEXTURES_DIR+"/Gradients/" + file_name, textureSettings);
                     file_name = Regex.Replace(file_name, @"\.((png)|(jpg))$", "");
-                    FileHelper.SaveValueToFile(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(saved)), Parser.ObjectToString(data.Gradient), PATH.GRADIENT_INFO_FILE);
+                    FileHelper.SaveValueToFile(AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(saved)), Parser.ObjectToString(data.gradient), PATH.GRADIENT_INFO_FILE);
                     prop.textureValue = saved;
                 }
             }
@@ -134,7 +133,7 @@ namespace Thry
 
             preset_libary_onGUI = gradient_preset_libary_editor_type.GetMethod("OnGUI");
 
-            SetGradient(data.Gradient);
+            SetGradient(data.gradient);
             gradient_has_been_edited = false;
 
             inited = true;
@@ -150,12 +149,8 @@ namespace Thry
 
         void SetGradient(Gradient gradient)
         {
-            data.Gradient = gradient;
-#if UNITY_2020_1_OR_NEWER
-            gradient_editor_init.Invoke(gradient_editor, new object[] { gradient, 0, true, ColorSpace.Linear });
-#else
+            data.gradient = gradient;
             gradient_editor_init.Invoke(gradient_editor, new object[] { gradient, 0, true });
-#endif
             UpdateGradientPreviewTexture();
         }
 
@@ -177,7 +172,7 @@ namespace Thry
 
             OverrideGradientTexture(gradientEditorRect);
 
-            preset_libary_onGUI.Invoke(preset_libary_editor, new object[] { gradientLibraryRect, data.Gradient });
+            preset_libary_onGUI.Invoke(preset_libary_editor, new object[] { gradientLibraryRect, data.gradient });
 
             GUILayout.BeginVertical();
             GUILayout.Space(gradientEditorHeight+ presetLibraryHeight+ distBetween);
@@ -197,7 +192,7 @@ namespace Thry
             prop.textureValue = privious_preview_texture;
             SetGradient(TextureHelper.GetGradient(privious_preview_texture));
             gradient_has_been_edited = false;
-            ShaderEditor.RepaintActive();
+            ShaderEditor.Repaint();
         }
 
         private void TextureSettingsGUI()
@@ -215,18 +210,18 @@ namespace Thry
 
         private void UpdateGradientPreviewTexture()
         {
-            data.PreviewTexture = Converter.GradientToTexture(data.Gradient, textureSettings.width, textureSettings.height);
-            textureSettings.ApplyModes(data.PreviewTexture);
-            prop.textureValue = data.PreviewTexture;
+            data.preview_texture = Converter.GradientToTexture(data.gradient, textureSettings.width, textureSettings.height);
+            textureSettings.ApplyModes(data.preview_texture);
+            prop.textureValue = data.preview_texture;
             gradient_has_been_edited = true;
-            ShaderEditor.RepaintActive();
+            ShaderEditor.Repaint();
         }
 
         private void UpdatePreviewTexture(Texture texture)
         {
-            data.PreviewTexture = texture;
+            data.preview_texture = texture;
             prop.textureValue = texture;
-            ShaderEditor.RepaintActive();
+            ShaderEditor.Repaint();
         }
 
         private void OverrideGradientTexture(Rect position)
@@ -248,11 +243,11 @@ namespace Thry
             Rect texCoordsRect = new Rect(0, 0, r2.width / backgroundTexture.width, r2.height / backgroundTexture.height);
             GUI.DrawTextureWithTexCoords(r2, backgroundTexture, texCoordsRect, false);
 
-            TextureWrapMode wrap_mode = data.PreviewTexture.wrapMode;
-            data.PreviewTexture.wrapMode = TextureWrapMode.Clamp;
-            GUI.DrawTexture(r2, data.PreviewTexture, ScaleMode.StretchToFill, true);
-            GUI.DrawTexture(gradient_texture_position, data.PreviewTexture, ScaleMode.StretchToFill, false, 0, Color.grey, 1, 1);
-            data.PreviewTexture.wrapMode = wrap_mode;
+            TextureWrapMode wrap_mode = data.preview_texture.wrapMode;
+            data.preview_texture.wrapMode = TextureWrapMode.Clamp;
+            GUI.DrawTexture(r2, data.preview_texture, ScaleMode.StretchToFill, true);
+            GUI.DrawTexture(gradient_texture_position, data.preview_texture, ScaleMode.StretchToFill, false, 0, Color.grey, 1, 1);
+            data.preview_texture.wrapMode = wrap_mode;
         }
 
     }

@@ -67,47 +67,6 @@ namespace Thry
             return fileCache[url];
         }
 
-        public static string Translate(string text, string targetLanguage)
-        {
-            string sourceLang = "auto";
-            string url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=" 
-                + sourceLang + "&tl=" + targetLanguage + "&dt=t&q=" + UnityWebRequest.EscapeURL(text);
-            string resp = DownloadAsString(url);
-
-            // parse response. it is a json array with the first elements being the translation. but not good json that my existing parser can parse
-            List<string> parts = new List<string>();
-            int indent = 0;
-            bool inString = false;
-            for(int i = 0; i< resp.Length; i++)
-            {
-                if (resp[i] == '[') indent++;
-                if (resp[i] == ']') indent--;
-                if (resp[i] == '"' && resp[i - 1] != '\\')
-                {
-                    inString = !inString;
-                    if(inString && indent == 3)
-                        parts.Add("");
-                    if(!inString && indent == 3 && resp[i+1] != ',')
-                        parts.RemoveAt(parts.Count - 1);
-                }else 
-                if (inString && indent == 3)
-                {
-                    parts[parts.Count - 1] += resp[i];
-                }
-            }
-            string result = "";
-            for(int i = 0; i< parts.Count; i++)
-            {
-                if (i % 2 == 0)
-                    result += parts[i];
-            }
-
-            // double unescape to fix some weird characters
-            result = System.Text.RegularExpressions.Regex.Unescape(result);
-            result = UnityWebRequest.UnEscapeURL(result, System.Text.Encoding.UTF8);
-            return result;
-        }
-
         //-------------------Downloaders-----------------------------
 
         [InitializeOnLoad]
@@ -115,7 +74,7 @@ namespace Thry
         {
             private struct CallData
             {
-                public object action;
+                public Action<string> action;
                 public object[] arguments;
             }
             static List<CallData> queue;
@@ -126,7 +85,7 @@ namespace Thry
                 EditorApplication.update += Update;
             }
 
-            public static void Call(object action, params object[] args)
+            public static void Call(Action<string> action, params object[] args)
             {
                 if (action == null)
                     return;
@@ -146,12 +105,9 @@ namespace Thry
                 {
                     try
                     {
-                        if(queue[0].action is Action<string>) ((Action<string>)queue[0].action).DynamicInvoke(queue[0].arguments);
-                        if(queue[0].action is Action<byte[]>) ((Action<byte[]>)queue[0].action).DynamicInvoke(queue[0].arguments);
+                        queue[0].action.DynamicInvoke(queue[0].arguments);
                     }
-                    catch(Exception e) {
-                        Debug.LogWarning("[Thry] Error during WebRequest: " + e.ToString());
-                    }
+                    catch { }
                     queue.RemoveAt(0);
                 }
             }
@@ -170,7 +126,7 @@ namespace Thry
                     MainThreader.Call(callback, null);
                 else
                 {
-                    FileHelper.WriteBytesToFile(a.Result, path);
+                    FileHelper.writeBytesToFile(a.Result, path);
                     MainThreader.Call(callback, path);
                 }
             });
@@ -184,20 +140,6 @@ namespace Thry
         public static void DownloadStringASync(string url, Action<string> callback)
         {
             DownloadAsStringASync(url, delegate (object o, DownloadStringCompletedEventArgs e)
-            {
-                if (e.Cancelled || e.Error != null)
-                {
-                    Debug.LogWarning(e.Error);
-                    MainThreader.Call(callback, null);
-                }
-                else
-                    MainThreader.Call(callback, e.Result);
-            });
-        }
-
-        public static void DownloadBytesASync(string url, Action<byte[]> callback)
-        {
-            DownloadAsBytesASync(url, delegate (object o, DownloadDataCompletedEventArgs e)
             {
                 if (e.Cancelled || e.Error != null)
                 {

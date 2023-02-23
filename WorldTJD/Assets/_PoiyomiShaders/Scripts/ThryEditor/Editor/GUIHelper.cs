@@ -11,141 +11,106 @@ namespace Thry
 {
     public class GuiHelper
     {
-        public const float SMALL_TEXTURE_VRAM_DISPLAY_WIDTH = 80;
 
-        public static void ConfigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties, bool skip_drag_and_drop_handling = false)
+        public static void drawConfigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties, bool skip_drag_and_drop_handling = false)
         {
             switch (Config.Singleton.default_texture_type)
             {
                 case TextureDisplayType.small:
-                    SmallTextureProperty(position, prop, label, editor, hasFoldoutProperties);
+                    drawSmallTextureProperty(position, prop, label, editor, hasFoldoutProperties);
                     break;
                 case TextureDisplayType.big:
-                    if (DrawingData.CurrentTextureProperty.DoReferencePropertiesExist || DrawingData.CurrentTextureProperty.DoesReferencePropertyExist)
-                        StylizedBigTextureProperty(position, prop, label, editor, hasFoldoutProperties);
+                    if (DrawingData.currentTexProperty.reference_properties_exist || DrawingData.currentTexProperty.reference_property_exists)
+                        drawStylizedBigTextureProperty(position, prop, label, editor, hasFoldoutProperties);
                     else
-                        BigTextureProperty(position, prop, label, editor, DrawingData.CurrentTextureProperty.hasScaleOffset);
+                        drawBigTextureProperty(position, prop, label, editor, DrawingData.currentTexProperty.hasScaleOffset);
                     break;
 
                 case TextureDisplayType.stylized_big:
-                    StylizedBigTextureProperty(position, prop, label, editor, hasFoldoutProperties, skip_drag_and_drop_handling);
+                    drawStylizedBigTextureProperty(position, prop, label, editor, hasFoldoutProperties, skip_drag_and_drop_handling);
                     break;
             }
         }
 
-        public static float GetSmallTextureVRAMWidth(MaterialProperty textureProperty)
-        {
-            if (textureProperty.textureValue != null) return SMALL_TEXTURE_VRAM_DISPLAY_WIDTH;
-            return 0;
-        }
-
-        public static void SmallTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties, Action extraFoldoutGUI = null)
+        public static void drawSmallTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties)
         {
             Rect thumbnailPos = position;
             Rect foloutClickCheck = position;
-            Rect tooltipRect = position;
-            if (hasFoldoutProperties)
-            {
-                thumbnailPos.x += 20;
-                thumbnailPos.width -= 20;
-            }
+            thumbnailPos.x += hasFoldoutProperties ? 20 : 0;
             editor.TexturePropertyMiniThumbnail(thumbnailPos, prop, label.text, label.tooltip);
-            //VRAM
-            Rect vramPos = Rect.zero;
-            if (DrawingData.CurrentTextureProperty.MaterialProperty.textureValue != null)
+            DrawingData.currentTexProperty.tooltip.ConditionalDraw(thumbnailPos);
+            if (DrawingData.currentTexProperty.reference_property_exists)
             {
-                GUIContent content = new GUIContent(DrawingData.CurrentTextureProperty.VRAMString);
-                vramPos = thumbnailPos;
-                vramPos.x += thumbnailPos.width - SMALL_TEXTURE_VRAM_DISPLAY_WIDTH;
-                vramPos.width = SMALL_TEXTURE_VRAM_DISPLAY_WIDTH;
-                GUI.Label(vramPos, content, Styles.label_align_right);
-            }
-            //Prop right next to texture
-            if (DrawingData.CurrentTextureProperty.DoesReferencePropertyExist)
-            {
-                ShaderProperty property = ShaderEditor.Active.PropertyDictionary[DrawingData.CurrentTextureProperty.Options.reference_property];
+                ShaderProperty property = ShaderEditor.active.propertyDictionary[DrawingData.currentTexProperty.options.reference_property];
                 Rect r = position;
                 r.x += EditorGUIUtility.labelWidth - CurrentIndentWidth();
                 r.width -= EditorGUIUtility.labelWidth - CurrentIndentWidth();
-                r.width -= vramPos.width;
                 foloutClickCheck.width -= r.width;
                 property.Draw(new CRect(r), new GUIContent());
                 property.tooltip.ConditionalDraw(r);
             }
-            //Foldouts
-            if (hasFoldoutProperties && DrawingData.CurrentTextureProperty != null)
+            if (hasFoldoutProperties && DrawingData.currentTexProperty != null)
             {
                 //draw dropdown triangle
-                Rect trianglePos = thumbnailPos;
-                trianglePos.x += DrawingData.CurrentTextureProperty.XOffset * 15 - 2;
+                thumbnailPos.x += DrawingData.currentTexProperty.xOffset * 15;
                 //This is an invisible button with zero functionality. But it needs to be here so that the triangle click reacts fast
-                if (GUI.Button(trianglePos, "", GUIStyle.none)) { }
+                if (GUI.Button(thumbnailPos, "", Styles.none)) { }
                 if (Event.current.type == EventType.Repaint)
-                    EditorStyles.foldout.Draw(trianglePos, false, false, DrawingData.CurrentTextureProperty.showFoldoutProperties, false);
+                    EditorStyles.foldout.Draw(thumbnailPos, false, false, DrawingData.currentTexProperty.showFoldoutProperties, false);
 
-                if (DrawingData.IsEnabled)
+                if (DrawingData.is_enabled)
                 {
-                    //sub properties
-                    if (DrawingData.CurrentTextureProperty.showFoldoutProperties)
+                    //test click and draw scale/offset
+                    if (DrawingData.currentTexProperty.showFoldoutProperties)
                     {
                         EditorGUI.indentLevel += 2;
-                        extraFoldoutGUI?.Invoke();
-                        if (DrawingData.CurrentTextureProperty.hasScaleOffset)
+                        if (DrawingData.currentTexProperty.hasScaleOffset)
                         {
-                            ShaderEditor.Active.Editor.TextureScaleOffsetProperty(prop);
-                            tooltipRect.height += GUILayoutUtility.GetLastRect().height;
+                            ShaderEditor.active.editor.TextureScaleOffsetProperty(prop);
+                            if(DrawingData.currentTexProperty.is_animatable)
+                                DrawingData.currentTexProperty.HandleKajAnimatable();
                         }
-                        //In case of locked material end disabled group here to allow editing of sub properties
-                        if (ShaderEditor.Active.IsLockedMaterial) EditorGUI.EndDisabledGroup();
 
-                        PropertyOptions options = DrawingData.CurrentTextureProperty.Options;
+                        PropertyOptions options = DrawingData.currentTexProperty.options;
                         if (options.reference_properties != null)
                             foreach (string r_property in options.reference_properties)
                             {
-                                ShaderProperty property = ShaderEditor.Active.PropertyDictionary[r_property];
+                                ShaderProperty property = ShaderEditor.active.propertyDictionary[r_property];
                                 property.Draw(useEditorIndent: true);
                             }
-
-                        //readd disabled group
-                        if (ShaderEditor.Active.IsLockedMaterial) EditorGUI.BeginDisabledGroup(false);
-
                         EditorGUI.indentLevel -= 2;
                     }
-                    if (ShaderEditor.Input.LeftClick_IgnoreLockedAndUnityUses && foloutClickCheck.Contains(Event.current.mousePosition))
+                    if (ShaderEditor.input.MouseLeftClick && foloutClickCheck.Contains(Event.current.mousePosition))
                     {
-                        ShaderEditor.Input.Use();
-                        DrawingData.CurrentTextureProperty.showFoldoutProperties = !DrawingData.CurrentTextureProperty.showFoldoutProperties;
+                        ShaderEditor.input.Use();
+                        DrawingData.currentTexProperty.showFoldoutProperties = !DrawingData.currentTexProperty.showFoldoutProperties;
                     }
                 }
             }
-
+            
             Rect object_rect = new Rect(position);
             object_rect.height = GUILayoutUtility.GetLastRect().y - object_rect.y + GUILayoutUtility.GetLastRect().height;
-            DrawingData.LastGuiObjectRect = object_rect;
-            DrawingData.TooltipCheckRect = tooltipRect;
+            DrawingData.lastGuiObjectRect = object_rect;
         }
 
-        public static void BigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool scaleOffset)
+        public static void drawBigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool scaleOffset)
         {
-            string text = label.text;
-            if (DrawingData.CurrentTextureProperty.MaterialProperty.textureValue != null)
-                text += $" ({DrawingData.CurrentTextureProperty.VRAMString})";
             Rect rect = GUILayoutUtility.GetRect(label, Styles.bigTextureStyle);
             float defaultLabelWidth = EditorGUIUtility.labelWidth;
             float defaultFieldWidth = EditorGUIUtility.fieldWidth;
             editor.SetDefaultGUIWidths();
-            editor.TextureProperty(position, prop, text, label.tooltip, scaleOffset);
+            editor.TextureProperty(position, prop, label.text, label.tooltip, scaleOffset);
             EditorGUIUtility.labelWidth = defaultLabelWidth;
             EditorGUIUtility.fieldWidth = defaultFieldWidth;
             Rect object_rect = new Rect(position);
             object_rect.height += rect.height;
-            DrawingData.LastGuiObjectRect = object_rect;
-            DrawingData.TooltipCheckRect = object_rect;
+            DrawingData.lastGuiObjectRect = object_rect;
+            DrawingData.currentTexProperty.tooltip.ConditionalDraw(object_rect);
         }
 
-        static int s_texturePickerWindow = -1;
-        static MaterialProperty s_texturePickerWindowProperty = null;
-        public static void StylizedBigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties, bool skip_drag_and_drop_handling = false)
+        static int texturePickerWindow = -1;
+        static MaterialProperty texturePickerWindowProperty = null;
+        public static void drawStylizedBigTextureProperty(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor, bool hasFoldoutProperties, bool skip_drag_and_drop_handling = false)
         {
             position.x += (EditorGUI.indentLevel) * 15;
             position.width -= (EditorGUI.indentLevel) * 15;
@@ -156,32 +121,22 @@ namespace Thry
             border.position = new Vector2(border.x, border.y - position.height);
             border.height += position.height;
 
-            if (DrawingData.CurrentTextureProperty.DoReferencePropertiesExist)
+            if (DrawingData.currentTexProperty.reference_properties_exist)
             {
                 border.height += 8;
-                foreach (string r_property in DrawingData.CurrentTextureProperty.Options.reference_properties)
+                foreach (string r_property in DrawingData.currentTexProperty.options.reference_properties)
                 {
-                    border.height += editor.GetPropertyHeight(ShaderEditor.Active.PropertyDictionary[r_property].MaterialProperty);
+                    border.height += editor.GetPropertyHeight(ShaderEditor.active.propertyDictionary[r_property].materialProperty);
                 }
             }
-            if (DrawingData.CurrentTextureProperty.DoesReferencePropertyExist)
+            if (DrawingData.currentTexProperty.reference_property_exists)
             {
                 border.height += 8;
-                border.height += editor.GetPropertyHeight(ShaderEditor.Active.PropertyDictionary[DrawingData.CurrentTextureProperty.Options.reference_property].MaterialProperty);
-            }
-            if (DrawingData.CurrentTextureProperty.MaterialProperty != null)
-            {
-                border.height += 8;
-                border.height += EditorStyles.label.lineHeight;
+                border.height += editor.GetPropertyHeight(ShaderEditor.active.propertyDictionary[DrawingData.currentTexProperty.options.reference_property].materialProperty);
             }
 
 
             //background
-            //GUI.DrawTexture(border, Styles.rounded_texture, ScaleMode.StretchToFill, true, 0, Styles.COLOR_BACKGROUND_1, 0, 0);
-
-            Color prevC = GUI.color;
-            GUI.color = Styles.COLOR_BACKGROUND_1;
-
             GUI.DrawTexture(border, Styles.rounded_texture, ScaleMode.StretchToFill, true);
             Rect quad = new Rect(border);
             quad.width = quad.height / 2;
@@ -189,12 +144,12 @@ namespace Thry
             quad.x += border.width - quad.width;
             GUI.DrawTextureWithTexCoords(quad, Styles.rounded_texture, new Rect(0.5f, 0, 0.5f, 1), true);
 
-            GUI.color = prevC;
-
             quad.width = border.height - 4;
             quad.height = quad.width;
             quad.x = border.x + border.width - quad.width - 1;
             quad.y += 2;
+
+            DrawingData.currentTexProperty.tooltip.ConditionalDraw(border);
 
             Rect preview_rect_border = new Rect(position);
             preview_rect_border.height = rect.height + position.height - 6;
@@ -215,7 +170,7 @@ namespace Thry
             }
             else if (prop.textureValue != null)
             {
-                EditorGUI.DrawPreviewTexture(preview_rect, prop.textureValue);
+                GUI.DrawTexture(preview_rect, prop.textureValue);
             }
             GUI.DrawTexture(preview_rect_border, Texture2D.whiteTexture, ScaleMode.StretchToFill, false, 0, Color.grey, 3, 5);
 
@@ -223,21 +178,21 @@ namespace Thry
             Rect select_rect = new Rect(preview_rect);
             select_rect.height = 12;
             select_rect.y += preview_rect.height - 12;
-            if (Event.current.commandName == "ObjectSelectorUpdated" && EditorGUIUtility.GetObjectPickerControlID() == s_texturePickerWindow && s_texturePickerWindowProperty.name == prop.name)
+            if (Event.current.commandName == "ObjectSelectorUpdated" && EditorGUIUtility.GetObjectPickerControlID() == texturePickerWindow && texturePickerWindowProperty.name == prop.name)
             {
                 prop.textureValue = (Texture)EditorGUIUtility.GetObjectPickerObject();
-                ShaderEditor.RepaintActive();
+                ShaderEditor.Repaint();
             }
-            if (Event.current.commandName == "ObjectSelectorClosed" && EditorGUIUtility.GetObjectPickerControlID() == s_texturePickerWindow)
+            if (Event.current.commandName == "ObjectSelectorClosed" && EditorGUIUtility.GetObjectPickerControlID() == texturePickerWindow)
             {
-                s_texturePickerWindow = -1;
-                s_texturePickerWindowProperty = null;
+                texturePickerWindow = -1;
+                texturePickerWindowProperty = null;
             }
             if (GUI.Button(select_rect, "Select", EditorStyles.miniButton))
             {
                 EditorGUIUtility.ShowObjectPicker<Texture>(prop.textureValue, false, "", 0);
-                s_texturePickerWindow = EditorGUIUtility.GetObjectPickerControlID();
-                s_texturePickerWindowProperty = prop;
+                texturePickerWindow = EditorGUIUtility.GetObjectPickerControlID();
+                texturePickerWindowProperty = prop;
             }
             else if (Event.current.type == EventType.MouseDown && preview_rect.Contains(Event.current.mousePosition))
             {
@@ -245,62 +200,52 @@ namespace Thry
             }
 
             if (!skip_drag_and_drop_handling)
-                if ((ShaderEditor.Input.is_drag_drop_event) && preview_rect.Contains(ShaderEditor.Input.mouse_position) && DragAndDrop.objectReferences[0] is Texture)
+                if ((ShaderEditor.input.is_drag_drop_event) && preview_rect.Contains(ShaderEditor.input.mouse_position) && DragAndDrop.objectReferences[0] is Texture)
                 {
                     DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
-                    if (ShaderEditor.Input.is_drop_event)
+                    if (ShaderEditor.input.is_drop_event)
                     {
                         DragAndDrop.AcceptDrag();
                         prop.textureValue = (Texture)DragAndDrop.objectReferences[0];
                     }
                 }
 
-            //Change indent & label width
-            EditorGUI.indentLevel += 2;
-            float oldLabelWidth = EditorGUIUtility.labelWidth;
-            EditorGUIUtility.labelWidth = 128;
+            //scale offset rect
 
-            //scale offset rect + foldout properties
-            if (hasFoldoutProperties || DrawingData.CurrentTextureProperty.Options.reference_property != null)
+            if (hasFoldoutProperties || DrawingData.currentTexProperty.options.reference_property != null)
             {
-                if (DrawingData.CurrentTextureProperty.hasScaleOffset)
+                EditorGUI.indentLevel += 2;
+
+                if (DrawingData.currentTexProperty.hasScaleOffset)
                 {
                     Rect scale_offset_rect = new Rect(position);
                     scale_offset_rect.y += 37;
                     scale_offset_rect.width -= 2 + preview_rect.width + 10 + 30;
                     scale_offset_rect.x += 30;
                     editor.TextureScaleOffsetProperty(scale_offset_rect, prop);
+                    if (DrawingData.currentTexProperty.is_animatable)
+                        DrawingData.currentTexProperty.HandleKajAnimatable();
                 }
+                float oldLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 128;
 
-                //In case of locked material end disabled group here to allow editing of sub properties
-                if (ShaderEditor.Active.IsLockedMaterial) EditorGUI.EndDisabledGroup();
-
-                PropertyOptions options = DrawingData.CurrentTextureProperty.Options;
+                PropertyOptions options = DrawingData.currentTexProperty.options;
                 if (options.reference_property != null)
                 {
-                    ShaderProperty property = ShaderEditor.Active.PropertyDictionary[options.reference_property];
+                    ShaderProperty property = ShaderEditor.active.propertyDictionary[options.reference_property];
                     property.Draw(useEditorIndent: true);
                 }
                 if (options.reference_properties != null)
                     foreach (string r_property in options.reference_properties)
                     {
-                        ShaderProperty property = ShaderEditor.Active.PropertyDictionary[r_property];
+                        ShaderProperty property = ShaderEditor.active.propertyDictionary[r_property];
                         property.Draw(useEditorIndent: true);
+                        if (DrawingData.currentTexProperty.is_animatable)
+                            property.HandleKajAnimatable();
                     }
-
-                //readd disabled group
-                if (ShaderEditor.Active.IsLockedMaterial) EditorGUI.BeginDisabledGroup(false);
+                EditorGUIUtility.labelWidth = oldLabelWidth;
+                EditorGUI.indentLevel -= 2;
             }
-
-            //VRAM
-            if (DrawingData.CurrentTextureProperty.MaterialProperty.textureValue != null)
-            {
-                EditorGUILayout.LabelField("VRAM", DrawingData.CurrentTextureProperty.VRAMString);
-            }
-
-            //reset indent + label width
-            EditorGUI.indentLevel -= 2;
-            EditorGUIUtility.labelWidth = oldLabelWidth;
 
             Rect label_rect = new Rect(position);
             label_rect.x += 2;
@@ -308,22 +253,11 @@ namespace Thry
             GUI.Label(label_rect, label);
 
             GUILayoutUtility.GetRect(0, 5);
-
-            DrawingData.LastGuiObjectRect = border;
-            DrawingData.TooltipCheckRect = border;
+            
+            DrawingData.lastGuiObjectRect = border;
         }
 
-        static Stack<int> s_previousIndentLevels = new Stack<int>();
-        public static void BeginCustomIndentLevel(int indent)
-        {
-            s_previousIndentLevels.Push(EditorGUI.indentLevel);
-            EditorGUI.indentLevel = indent;
-        }
-
-        public static void EndCustomIndentLevel()
-        {
-            EditorGUI.indentLevel = s_previousIndentLevels.Pop();
-        }
+        const float kNumberWidth = 65;
 
         public static void MinMaxSlider(Rect settingsRect, GUIContent content, MaterialProperty prop)
         {
@@ -336,7 +270,7 @@ namespace Thry
             if (settingsRect.width > 160)
             {
                 Rect numberRect = settingsRect;
-                numberRect.width = 65 + (EditorGUI.indentLevel - 1) * 15;
+                numberRect.width = kNumberWidth + (EditorGUI.indentLevel - 1) * 15;
 
                 numberRect.x = EditorGUIUtility.labelWidth - (EditorGUI.indentLevel - 1) * 15;
 
@@ -353,8 +287,8 @@ namespace Thry
                 changed |= EditorGUI.EndChangeCheck();
 
                 sliderRect.xMin = EditorGUIUtility.labelWidth - (EditorGUI.indentLevel - 1) * 15;
-                sliderRect.xMin += (65 + -8);
-                sliderRect.xMax -= (65 + -8);
+                sliderRect.xMin += (kNumberWidth + -8);
+                sliderRect.xMax -= (kNumberWidth + -8);
             }
 
             vec.x = Mathf.Clamp(vec.x, vec.z, vec.y);
@@ -481,8 +415,8 @@ namespace Thry
             selected = EditorGUILayout.Popup(label.text, selected, locales);
             if (EditorGUI.EndChangeCheck())
             {
-                ShaderEditor.Active.PropertyDictionary[ShaderEditor.PROPERTY_NAME_LOCALE].MaterialProperty.floatValue = selected;
-                ShaderEditor.ReloadActive();
+                ShaderEditor.active.propertyDictionary[ShaderEditor.PROPERTY_NAME_LOCALE].materialProperty.floatValue = selected;
+                ShaderEditor.reload();
             }
         }
 
@@ -501,15 +435,23 @@ namespace Thry
             EditorGUI.LabelField(rect, "<size=16>" + shaderName + "</size>", Styles.masterLabel);
         }
 
+        public static void DrawNotificationBox(Rect position, int width, int height, string text)
+        {
+            Rect box_position = new Rect(position.x- width + position.width, position.y + position.height + 50, width,height);
+            Rect arrow_position = new Rect(position.x - 25, position.y + position.height, 50, 50);
+            GUI.DrawTexture(arrow_position, Styles.t_arrow, ScaleMode.ScaleToFit, true, 0, Color.red, 0, 0);
+            GUI.Box(box_position, text, Styles.notification_style);
+        }
+
         public static float CurrentIndentWidth()
         {
             return EditorGUI.indentLevel * 15;
         }
         // Mimics the normal map import warning - written by Orels1
-        static bool TextureImportWarningBox(string message) {
+        static bool TextureImportWarningBox(string message){
             GUILayout.BeginVertical(new GUIStyle(EditorStyles.helpBox));
-            GUILayout.Label(message, new GUIStyle(EditorStyles.label) {
-                fontSize = 10, wordWrap = true
+            EditorGUILayout.LabelField(message, new GUIStyle(EditorStyles.label) {
+                fontSize = 9, wordWrap = true
             });
             EditorGUILayout.BeginHorizontal(new GUIStyle() {
                 alignment = TextAnchor.MiddleRight
@@ -524,162 +466,23 @@ namespace Thry
             GUILayout.EndVertical();
             return buttonPress;
         }
-
-        public static void ColorspaceWarning(MaterialProperty tex, bool shouldHaveSRGB) {
-            if (tex.textureValue) {
+        public static void sRGBWarning(MaterialProperty tex){
+            if (tex.textureValue){
+                string sRGBWarning = "This texture is marked as sRGB, but should not contain color information.";
                 string texPath = AssetDatabase.GetAssetPath(tex.textureValue);
                 TextureImporter texImporter;
                 var importer = TextureImporter.GetAtPath(texPath) as TextureImporter;
-                if (importer != null) {
+                if (importer != null){
                     texImporter = (TextureImporter)importer;
-                    if (texImporter.sRGBTexture != shouldHaveSRGB) {
-                        if (TextureImportWarningBox(shouldHaveSRGB ? EditorLocale.editor.Get("colorSpaceWarningSRGB") : EditorLocale.editor.Get("colorSpaceWarningLinear"))) {
-                            texImporter.sRGBTexture = shouldHaveSRGB;
+                    if (texImporter.sRGBTexture){
+                        if (TextureImportWarningBox(sRGBWarning)){
+                            texImporter.sRGBTexture = false;
                             texImporter.SaveAndReimport();
                         }
                     }
                 }
             }
         }
-
-        public class CustomGUIColor : IDisposable
-        {
-            Color _prev;
-            public CustomGUIColor(Color color)
-            {
-                _prev = GUI.color;
-                GUI.color = color;
-            }
-
-            public void Dispose()
-            {
-                GUI.color = _prev;
-            }
-        }
-
-        public static bool Button(Rect r, GUIStyle style)
-        {
-            return GUI.Button(r, GUIContent.none, style);
-        }
-
-        public static bool Button(Rect r, string tooltip, GUIStyle style)
-        {
-            return GUI.Button(r, new GUIContent("", tooltip), style);
-        }
-
-        public static bool Button(GUIStyle style, int width, int height)
-        {
-            Rect r = GUILayoutUtility.GetRect(width, height);
-            return Button(r, style);
-        }
-        
-        public static bool ButtonWithCursor(GUIStyle style, int width, int height)
-        {
-            Rect r = GUILayoutUtility.GetRect(width, height);
-            EditorGUIUtility.AddCursorRect(r, MouseCursor.Link);
-            return Button(r, style);
-        }
-        
-        public static bool ButtonWithCursor(GUIStyle style, string tooltip, int width, int height)
-        {
-            Rect r = GUILayoutUtility.GetRect(width, height);
-            EditorGUIUtility.AddCursorRect(r, MouseCursor.Link);
-            return Button(r, tooltip, style);
-        }
-
-        public static bool ButtonWithCursor(GUIStyle style, string tooltip, int width, int height, out Rect r)
-        {
-            r = GUILayoutUtility.GetRect(width, height);
-            EditorGUIUtility.AddCursorRect(r, MouseCursor.Link);
-            return Button(r, tooltip, style);
-        }
-
-        public static bool Button(Rect r, string tooltip, GUIStyle style, Color c)
-        {
-            Color prevColor = GUI.backgroundColor;
-            GUI.backgroundColor = c;
-            bool b = GuiHelper.Button(r, tooltip, style);
-            GUI.backgroundColor = prevColor;
-            return b;
-        }
-
-        public static bool Button(GUIStyle style, int width, int height, Color c)
-        {
-            Color prevColor = GUI.backgroundColor;
-            GUI.backgroundColor = c;
-            bool b = GuiHelper.Button(style, width, height);
-            GUI.backgroundColor = prevColor;
-            return b;
-        }
-
-        public static bool Button(Rect r, GUIStyle style, Color c, bool doColor)
-        {
-            Color prevColor = GUI.backgroundColor;
-            if(doColor) GUI.backgroundColor = c;
-            bool b = GuiHelper.Button(r, style);
-            GUI.backgroundColor = prevColor;
-            return b;
-        }
-
-        #region SearchableEnumPopup
-        public class SearchableEnumPopup : EditorWindow
-        {
-            private static SearchableEnumPopup window;
-            public static void CreateSearchableEnumPopup(string[] options, string selected, Action<string> setter)
-            {
-                Vector2 pos = GUIUtility.GUIToScreenPoint(Event.current.mousePosition);
-                pos.x = Mathf.Min(EditorWindow.focusedWindow.position.x + EditorWindow.focusedWindow.position.width - 250, pos.x);
-                pos.y = Mathf.Min(EditorWindow.focusedWindow.position.y + EditorWindow.focusedWindow.position.height - 200, pos.y);
-
-                if (window != null)
-                    window.Close();
-                window = ScriptableObject.CreateInstance<SearchableEnumPopup>();
-                window.position = new Rect(pos.x, pos.y, 250, 200);
-                window._options = options;
-                window._selected = selected;
-                window._setter = setter;
-                window._searchedFor = "";
-                window.ShowPopup();
-            }
-
-            private SearchableEnumPopup() { }
-
-            string[] _options;
-            string _selected;
-            string _searchedFor;
-            Action<string> _setter;
-
-            bool first = true;
-
-            private void OnGUI()
-            {
-                if (GUILayout.Button("Close")) this.Close();
-                GUI.SetNextControlName("SearchTextField");
-                _searchedFor = GUILayout.TextField(_searchedFor);
-                string seachTerm = _searchedFor.ToLowerInvariant().TrimStart('_');
-                string[] filteredOptions = _options.Where(o => o.TrimStart('_').ToLowerInvariant().StartsWith(seachTerm)).ToArray();
-                for (int i = 0; i < 7 && i < filteredOptions.Length; i++)
-                {
-                    if (GUILayout.Button(filteredOptions[i]))
-                    {
-                        _selected = filteredOptions[i];
-                        _setter.Invoke(_selected);
-                        this.Close();
-                    }
-                }
-                if (filteredOptions.Length > 7)
-                {
-                    GUILayout.Label("... More");
-                }
-                if (first)
-                {
-                    GUI.FocusControl("SearchTextField");
-                    first = false;
-                }
-            }
-        }
-
-        #endregion
     }
 
     public class BetterTooltips
@@ -801,7 +604,7 @@ namespace Thry
             if (isTextureContent)
             {
                 if(GUILayout.Button(content, new GUIStyle(), GUILayout.MaxWidth(texture_width), GUILayout.Height(texture_height))){
-                    data.action.Perform(ShaderEditor.Active?.Materials);
+                    data.action.Perform();
                 }
                 cursorRect = GUILayoutUtility.GetLastRect();
                 GUILayout.Space(8);
@@ -809,7 +612,7 @@ namespace Thry
             else
             {
                 if (GUILayout.Button(content, GUILayout.ExpandWidth(false), GUILayout.Height(texture_height)))
-                    data.action.Perform(ShaderEditor.Active?.Materials);
+                    data.action.Perform();
                 cursorRect = GUILayoutUtility.GetLastRect();
                 GUILayout.Space(2);
             }
@@ -830,92 +633,100 @@ namespace Thry
         }
     }
 
-    public class ThryHeaderHandler
+    public class ThryHeaderDrawer : MaterialPropertyDrawer
     {
         private MaterialProperty property;
 
-        private bool _isExpanded;
+        private bool expanded;
+
         private string keyword;
         private string end;
 
-        private bool _disableContentWhenKeywordOff;
+        public bool isHideable;
 
-        int p_xOffset;
-        int p_xOffset_total;
-        public int xOffset
-        {
-            set
-            {
-                p_xOffset = value;
-                p_xOffset_total = value * 15 + 15;
-            }
-        }
+        public int xOffset = 0;
 
         private ButtonData button;
 
-        public ThryHeaderHandler(string end, string keyword, float disableContentWhenKeywordOff)
+        public ThryHeaderDrawer(string end, string keyword, string buttonText, string buttonHover, string buttonAction, float isHideable)
         {
             this.end = end;
             this.keyword = keyword;
-            this._disableContentWhenKeywordOff = disableContentWhenKeywordOff == 1;
-        }
 
-        public ThryHeaderHandler(string end, string keyword) : this(end, keyword, 0) { }
-        public ThryHeaderHandler(string end) : this(end, null, 0) { }
-        public ThryHeaderHandler() : this(null, null, 0) { }
+            button = new ButtonData();
+            button.text = buttonText;
+            button.hover = buttonHover;
+            button.action = DefineableAction.ParseDrawerParameter(buttonAction);
+
+            this.isHideable = isHideable == 1;
+        }
+        
+        public ThryHeaderDrawer(string end, string keyword, string buttonText, string buttonHover, string buttonAction) : this(end, keyword, buttonText, buttonHover, buttonAction, 0          ) { }
+        public ThryHeaderDrawer(string end, string keyword, float isHideable) :                                           this(end, keyword, null,       null,        null,         isHideable ) { }
+        public ThryHeaderDrawer(string end, string keyword, string buttonAction) :                                        this(end, keyword, null,       null,        buttonAction, 0          ) { }
+        public ThryHeaderDrawer(string end, string keyword) :                                                             this(end, keyword, null,       null,        null,         0          ) { }
+        public ThryHeaderDrawer(string end) :                                                                             this(end, null   , null,       null,        null,         0          ) { }
+
+        public ThryHeaderDrawer(float isHideable) :                                                                       this(null,null,    null,       null,        null,         isHideable ) { }
+        public ThryHeaderDrawer(float isHideable, string end) :                                                           this(end, null,    null,       null,        null,         isHideable ) { }
+        public ThryHeaderDrawer(float isHideable, string buttonText, string buttonHover, string buttonAction) :           this(null,null,    buttonText, buttonHover, buttonAction, 0          ) { }
+        public ThryHeaderDrawer(float isHideable, string end, string buttonText, string buttonHover, string buttonAction):this(end, null,    buttonText, buttonHover, buttonAction, isHideable ) { }
+
+        public ThryHeaderDrawer(){}
 
         public string GetEndProperty()
         {
             return end;
         }
 
-        public bool IsExpanded
+        public override float GetPropertyHeight(MaterialProperty prop, string label, MaterialEditor editor)
         {
-            get
-            {
-                return _isExpanded;
-            }
+            DrawingData.lastPropertyUsedCustomDrawer = true;
+            DrawingData.lastPropertyDrawerType = DrawerType.Header;
+            DrawingData.lastPropertyDrawer = this;
+            return base.GetPropertyHeight(prop, label, editor);
         }
 
-        public bool DisableContent
+        public bool is_expanded
         {
             get
             {
-                return _disableContentWhenKeywordOff && !ShaderEditor.Active.Materials[0].IsKeywordEnabled(keyword);
+                return expanded;
             }
         }
 
         public void Toggle()
         {
-            _isExpanded = !_isExpanded;
-            foreach (Material m in ShaderEditor.Active.Materials) m.SetFloat(property.name, _isExpanded ? 1 : 0);
+            expanded = !expanded;
+            foreach (Material m in ShaderEditor.active.materials) m.SetFloat(property.name, expanded ? 1 : 0);
         }
 
-        public void OnGUI(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor)
+        public override void OnGUI(Rect position, MaterialProperty prop, GUIContent label, MaterialEditor editor)
         {
             if (this.property == null)
             {
                 this.property = prop;
-                this._isExpanded = prop.floatValue == 1;
+                this.expanded = prop.floatValue == 1;
             }
 
-            PropertyOptions options = ShaderEditor.Active.CurrentProperty.Options;
+            PropertyOptions options = ShaderEditor.active.currentProperty.options;
             Event e = Event.current;
 
-            position.width -= p_xOffset_total - position.x;
-            position.x = p_xOffset_total;
+            int offset = 15 * xOffset + 15;
+            position.width -= offset - position.x;
+            position.x = offset;
 
-            DrawingData.LastGuiObjectHeaderRect = position;
+            DrawingData.lastGuiObjectHeaderRect = position;
 
             DrawBoxAndContent(position, e, label, options);
 
             DrawSmallArrow(position, e);
-            HandleToggleInput(position);
+            HandleToggleInput(e, position);
         }
 
         private void DrawBoxAndContent(Rect rect, Event e, GUIContent content, PropertyOptions options)
         {
-            if (options.reference_property != null && ShaderEditor.Active.PropertyDictionary.ContainsKey(options.reference_property))
+            if (options.reference_property != null && ShaderEditor.active.propertyDictionary.ContainsKey(options.reference_property))
             {
                 GUI.Box(rect, new GUIContent("     " + content.text, content.tooltip), Styles.dropDownHeader);
                 DrawIcons(rect, options, e);
@@ -927,12 +738,12 @@ namespace Thry
                 togglePropertyRect.width = GUI.skin.font.fontSize * 3;
                 float fieldWidth = EditorGUIUtility.fieldWidth;
                 EditorGUIUtility.fieldWidth = 20;
-                ShaderProperty prop = ShaderEditor.Active.PropertyDictionary[options.reference_property];
+                ShaderProperty prop = ShaderEditor.active.propertyDictionary[options.reference_property];
 
-                int xOffset = prop.XOffset;
-                prop.XOffset = 0;
+                int xOffset = prop.xOffset;
+                prop.xOffset = 0;
                 prop.Draw(new CRect(togglePropertyRect), new GUIContent(), isInHeader: true);
-                prop.XOffset = xOffset;
+                prop.xOffset = xOffset;
                 EditorGUIUtility.fieldWidth = fieldWidth;
             }else if(keyword != null)
             {
@@ -944,10 +755,10 @@ namespace Thry
                 togglePropertyRect.width = 20;
 
                 EditorGUI.BeginChangeCheck();
-                bool keywordOn = EditorGUI.Toggle(togglePropertyRect, "", ShaderEditor.Active.Materials[0].IsKeywordEnabled(keyword));
+                bool keywordOn = EditorGUI.Toggle(togglePropertyRect, "", ShaderEditor.active.materials[0].IsKeywordEnabled(keyword));
                 if (EditorGUI.EndChangeCheck())
                 {
-                    MaterialHelper.ToggleKeyword(ShaderEditor.Active.Materials, keyword, keywordOn);
+                    MaterialHelper.ToggleKeyword(ShaderEditor.active.materials, keyword, keywordOn);
                 }
             }
             else
@@ -965,18 +776,9 @@ namespace Thry
         /// <param name="e"></param>
         private void DrawIcons(Rect rect, PropertyOptions options, Event e)
         {
-            Rect buttonRect = new Rect(rect);
-            buttonRect.y += 1;
-            buttonRect.height -= 4;
-            buttonRect.width = buttonRect.height;
-
-            float right = rect.x + rect.width;
-            buttonRect.x = right - 56;
-            DrawHelpButton(buttonRect, options, e);
-            buttonRect.x = right - 38;
-            DrawLinkSettings(buttonRect, e);
-            buttonRect.x = right - 20;
-            DrawDowdownSettings(buttonRect, e);
+            DrawHelpButton(rect, options, e);
+            DrawDowdownSettings(rect, e);
+            DrawLinkSettings(rect, e);
         }
 
         private void DrawHelpButton(Rect rect, PropertyOptions options, Event e)
@@ -984,37 +786,55 @@ namespace Thry
             ButtonData button = this.button != null ? this.button : options.button_help;
             if (button != null && button.condition_show.Test())
             {
-                if (GuiHelper.Button(rect, Styles.icon_style_help))
+                Rect buttonRect = new Rect(rect);
+                buttonRect.width = 20;
+                buttonRect.x += rect.width - 65;
+                buttonRect.y += 1;
+                buttonRect.height -= 4;
+                if (GUI.Button(buttonRect, Styles.icon_help, EditorStyles.largeLabel))
                 {
-                    ShaderEditor.Input.Use();
-                    if (button.action != null) button.action.Perform(ShaderEditor.Active?.Materials);
+                    e.Use();
+                    if (button.action != null) button.action.Perform();
                 }
             }
         }
 
         private void DrawDowdownSettings(Rect rect, Event e)
         {
-            if (GuiHelper.Button(rect, Styles.icon_style_menu))
+            Rect buttonRect = new Rect(rect);
+            buttonRect.width = 20;
+            buttonRect.x += rect.width - 25;
+            buttonRect.y += 1;
+            buttonRect.height -= 4;
+            if (GUI.Button(buttonRect, Styles.icon_menu, EditorStyles.largeLabel))
             {
-                ShaderEditor.Input.Use();
-                Rect buttonRect = new Rect(rect);
+                e.Use();
+
                 buttonRect.width = 150;
                 buttonRect.x = Mathf.Min(Screen.width - buttonRect.width, buttonRect.x);
                 buttonRect.height = 60;
                 float maxY = GUIUtility.ScreenToGUIPoint(new Vector2(0, EditorWindow.focusedWindow.position.y + Screen.height)).y - 2.5f * buttonRect.height;
                 buttonRect.y = Mathf.Min(buttonRect.y - buttonRect.height / 2, maxY);
 
-                ShowHeaderContextMenu(buttonRect, ShaderEditor.Active.CurrentProperty, ShaderEditor.Active.Materials[0]);
+                ShowHeaderContextMenu(buttonRect, ShaderEditor.active.currentProperty, ShaderEditor.active.materials[0]);
             }
         }
 
         private void DrawLinkSettings(Rect rect, Event e)
         {
-            if (GuiHelper.Button(rect, Styles.icon_style_linked, Styles.COLOR_ICON_ACTIVE_CYAN, MaterialLinker.IsLinked(ShaderEditor.Active.CurrentProperty.MaterialProperty)))
+            Rect buttonRect = new Rect(rect);
+            buttonRect.width = 20;
+            buttonRect.x += rect.width - 45;
+            buttonRect.y += 1;
+            buttonRect.height -= 4;
+            List<Material> linked_materials = MaterialLinker.GetLinked(ShaderEditor.active.currentProperty.materialProperty);
+            Texture2D icon = Styles.icon_link_inactive;
+            if (linked_materials != null)
+                icon = Styles.icon_link_active;
+            if (GUI.Button(buttonRect, icon, EditorStyles.largeLabel))
             {
-                ShaderEditor.Input.Use();
-                List<Material> linked_materials = MaterialLinker.GetLinked(ShaderEditor.Active.CurrentProperty.MaterialProperty);
-                MaterialLinker.Popup(rect, linked_materials, ShaderEditor.Active.CurrentProperty.MaterialProperty);
+                MaterialLinker.Popup(buttonRect, linked_materials, ShaderEditor.active.currentProperty.materialProperty);
+                e.Use();
             }
         }
 
@@ -1023,11 +843,11 @@ namespace Thry
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Reset"), false, delegate ()
             {
-                property.CopyFromMaterial(new Material(material.shader), true);
-                List<Material> linked_materials = MaterialLinker.GetLinked(property.MaterialProperty);
+                property.CopyFromMaterial(new Material(material.shader));
+                List<Material> linked_materials = MaterialLinker.GetLinked(property.materialProperty);
                 if (linked_materials != null)
                     foreach (Material m in linked_materials)
-                        property.CopyToMaterial(m, true);
+                        property.CopyToMaterial(m);
             });
             menu.AddItem(new GUIContent("Copy"), false, delegate ()
             {
@@ -1038,11 +858,11 @@ namespace Thry
             {
                 if (Mediator.copy_material != null || Mediator.transfer_group != null)
                 {
-                    property.TransferFromMaterialAndGroup(Mediator.copy_material, Mediator.transfer_group, true);
-                    List<Material> linked_materials = MaterialLinker.GetLinked(property.MaterialProperty);
+                    property.TransferFromMaterialAndGroup(Mediator.copy_material, Mediator.transfer_group);
+                    List<Material> linked_materials = MaterialLinker.GetLinked(property.materialProperty);
                     if (linked_materials != null)
                         foreach (Material m in linked_materials)
-                            property.CopyToMaterial(m, true);
+                            property.CopyToMaterial(m);
                 }
             });
             menu.DropDown(position);
@@ -1053,18 +873,169 @@ namespace Thry
             if (e.type == EventType.Repaint)
             {
                 var toggleRect = new Rect(rect.x + 4f, rect.y + 2f, 13f, 13f);
-                EditorStyles.foldout.Draw(toggleRect, false, false, _isExpanded, false);
+                EditorStyles.foldout.Draw(toggleRect, false, false, expanded, false);
             }
         }
 
-        private void HandleToggleInput(Rect rect)
+        private void HandleToggleInput(Event e, Rect rect)
         {
-            //Ignore unity uses is cause disabled will use the event to prevent toggling
-            if (ShaderEditor.Input.LeftClick_IgnoreLocked && rect.Contains(ShaderEditor.Input.mouse_position) && !ShaderEditor.Input.is_alt_down)
+            if (e.type == EventType.MouseDown && rect.Contains(e.mousePosition) && !e.alt)
             {
                 this.Toggle();
-                ShaderEditor.Input.Use();
+                e.Use();
             }
         }
+    }
+
+    public class HeaderHider{
+
+        public enum HeaderHidingType
+        {
+            simple = 1,
+            show_all = 2,
+            custom=3
+        }
+
+        private static Dictionary<string,bool> headerHiddenSaved;
+        public static HeaderHidingType state { get; private set; }
+        private static void LoadHiddenHeaderNames()
+        {
+            string data = PersistentData.Get("HiddenHeaderNames");
+            if (data == null)
+                headerHiddenSaved = new Dictionary<string, bool>();
+            else
+                headerHiddenSaved = Parser.Deserialize<Dictionary<string, bool>>(data);
+            data = PersistentData.Get("HeaderHiderState");
+            if (data == null)
+                state = HeaderHidingType.simple;
+            else
+                state = (HeaderHidingType)Enum.Parse(typeof(HeaderHidingType),data);
+        }
+
+        public static bool InitHidden(ShaderHeader header)
+        {
+            if (headerHiddenSaved == null)
+                LoadHiddenHeaderNames();
+            if (header.options.is_hideable == false)
+                return false;
+            bool is_hidden = false;
+            if (headerHiddenSaved.ContainsKey(header.materialProperty.name))
+                is_hidden =  headerHiddenSaved[header.materialProperty.name];
+            else
+                headerHiddenSaved[header.materialProperty.name] = is_hidden;
+            header.is_hidden = is_hidden;
+            return is_hidden;
+        }
+
+        public static void SetHidden(ShaderHeader header, bool set_hidden, bool save=true)
+        {
+            bool contains = headerHiddenSaved.ContainsKey(header.materialProperty.name);
+            if (!contains || (contains && headerHiddenSaved[header.materialProperty.name] != set_hidden))
+            {
+                headerHiddenSaved[header.materialProperty.name] = set_hidden;
+                header.is_hidden = set_hidden;
+                if(save)
+                    PersistentData.Set("HiddenHeaderNames", Parser.Serialize(headerHiddenSaved));
+            }
+            UpdateValues();
+        }
+        public static void SetHidden(List<ShaderPart> parts, bool set_hidden)
+        {
+            foreach (ShaderPart part in parts)
+            {
+                if (part.GetType() == typeof(ShaderHeader) && part.options.is_hideable)
+                {
+                    SetHidden((ShaderHeader)part, set_hidden, false);
+                }
+            }
+            PersistentData.Set("HiddenHeaderNames", Parser.Serialize(headerHiddenSaved));
+            UpdateValues();
+        }
+
+        private static void UpdateValues()
+        {
+            foreach (ShaderPart part in ShaderEditor.active.shaderParts)
+            {
+                if (part.options.is_hideable == false)
+                    continue;
+                bool is_hidden = part.is_hidden;
+            }
+        }
+
+        private static void SetType(HeaderHidingType newstate)
+        {
+            state = newstate;
+            PersistentData.Set("HeaderHiderState", state.ToString());
+        }
+
+        public static bool IsHeaderHidden(ShaderPart header)
+        {
+            return header.options.is_hideable && ((header.is_hidden && state == HeaderHidingType.custom) || (state == HeaderHidingType.simple && !header.options.is_visible_simple));
+        }
+
+        public static void HeaderHiderGUI(ShaderEditor editor)
+        {
+            EditorGUILayout.BeginHorizontal(Styles.style_toolbar);
+            if (GUILayout.Button("Simple", Styles.style_toolbar_toggle(state == HeaderHidingType.simple)))
+                SetType(HeaderHidingType.simple);
+            if (GUILayout.Button("Show All", Styles.style_toolbar_toggle(state == HeaderHidingType.show_all)))
+                SetType(HeaderHidingType.show_all);
+            Rect right = GUILayoutUtility.GetRect(10, 20);
+            Rect arrow = new Rect(right.x + right.width - 20, right.y, 20, 20);
+            if (GUI.Button(arrow, Styles.icon_menu, EditorStyles.largeLabel))
+                DrawHeaderHiderMenu(arrow, editor.shaderParts);
+            if (GUI.Button(right, "Custom", Styles.style_toolbar_toggle(state == HeaderHidingType.custom)))
+                SetType(HeaderHidingType.custom);
+
+            GUI.Button(arrow, Styles.icon_menu, EditorStyles.largeLabel);
+
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space();
+        }
+
+        public static void DrawHeaderHiderMenu(Rect position, List<ShaderPart> shaderParts)
+        {
+            position.y -= 5;
+            position.width = 150;
+            position.x = Mathf.Min(Screen.width - position.width, position.x);
+            position.height = 60;
+            float maxY = GUIUtility.ScreenToGUIPoint(new Vector2(0, EditorWindow.focusedWindow.position.y + Screen.height)).y - 2.5f * position.height;
+            position.y = Mathf.Min(position.y - position.height / 2, maxY);
+
+            var menu = new GenericMenu();
+
+            bool allHidden = true;
+            bool allShown = true;
+            foreach (ShaderPart part in shaderParts)
+            {
+                if (part.GetType() == typeof(ShaderHeader) && part.options.is_hideable)
+                {
+                    if (part.is_hidden)
+                        allShown = false;
+                    else
+                        allHidden = false;
+                }
+            }
+            menu.AddItem(new GUIContent("Everything"), allShown, delegate ()
+            {
+                SetHidden(shaderParts, false);
+            });
+            menu.AddItem(new GUIContent("Nothing"), allHidden, delegate ()
+            {
+                SetHidden(shaderParts, true);
+            });
+            foreach (ShaderPart part in shaderParts)
+            {
+                if (part.GetType() == typeof(ShaderHeader) && part.options.is_hideable)
+                {
+                    menu.AddItem(new GUIContent(part.content.text), !part.is_hidden, delegate ()
+                    {
+                        SetHidden((ShaderHeader)part, !part.is_hidden);
+                    });
+                }
+            }
+            menu.DropDown(position);
+        }
+
     }
 }

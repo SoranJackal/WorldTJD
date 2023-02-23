@@ -21,7 +21,7 @@ namespace Thry
 
     public class ModuleHandler
     {
-        private static List<Module> first_party_modules;
+        private static List<Module> modules;
         private static List<Module> third_party_modules;
         private static bool modules_are_being_loaded = false;
 
@@ -38,16 +38,11 @@ namespace Thry
             public List<ModuleCollectionInfo> third_party = null;
         }
 
-        public static List<Module> GetFirstPartyModules()
+        public static List<Module> GetModules()
         {
             if (!modules_are_being_loaded)
                 LoadModules();
-            return first_party_modules;
-        }
-
-        public static void ForceReloadModules()
-        {
-            LoadModules();
+            return modules;
         }
 
         public static List<Module> GetThirdPartyModules()
@@ -60,13 +55,13 @@ namespace Thry
         private static void LoadModules()
         {
             modules_are_being_loaded = true;
-            WebHelper.DownloadStringASync(URL.MODULE_COLLECTION, (Action<string>)delegate (string s) {
-                first_party_modules = new List<Module>();
+            WebHelper.DownloadStringASync(URL.MODULE_COLLECTION, delegate (string s) {
+                modules = new List<Module>();
                 third_party_modules = new List<Module>();
-                ModuleCollection module_collection = Parser.Deserialize<ModuleCollection>(s);
+                ModuleCollection module_collection = Parser.ParseToObject<ModuleCollection>(s);
                 foreach(ModuleCollectionInfo info in module_collection.first_party)
                 {
-                    LoadModule(info, first_party_modules);
+                    LoadModule(info,modules);
                 }
                 foreach (ModuleCollectionInfo info in module_collection.third_party)
                 {
@@ -77,27 +72,27 @@ namespace Thry
 
         private static void LoadModule(ModuleCollectionInfo info, List<Module> modules)
         {
-            WebHelper.DownloadStringASync(info.url, (Action<string>)delegate (string data)
+            WebHelper.DownloadStringASync(info.url, delegate (string data)
             {
                 Module new_module = new Module();
                 new_module.url = info.url;
                 new_module.author = info.author;
                 new_module.id = info.id;
-                new_module.available_module = Parser.Deserialize<ModuleInfo>(data);
+                new_module.available_module = Parser.ParseToObject<ModuleInfo>(data);
                 new_module.available_module.version = new_module.available_module.version.Replace(",", ".");
                 bool module_installed = LoadModuleLocationData(new_module);
                 if (module_installed)
                     InitInstalledModule(new_module);
                 else if (Helper.ClassWithNamespaceExists(new_module.available_module.classname))
                     CheckForUnregisteredInstall(new_module);
-                if (new_module.installed_module != null)
+                if(new_module.installed_module != null)
                     new_module.installed_module.version = new_module.installed_module.version.Replace(",", ".");
                 if (new_module.available_module.requirement != null)
                     new_module.available_requirement_fullfilled = new_module.available_module.requirement.Test();
-                if (new_module.available_requirement_fullfilled && new_module.installed_module != null && Helper.CompareVersions(new_module.installed_module.version, new_module.available_module.version) == 1)
+                if (new_module.available_requirement_fullfilled && new_module.installed_module != null && Helper.compareVersions(new_module.installed_module.version, new_module.available_module.version) == 1)
                     new_module.update_available = true;
                 modules.Add(new_module);
-                UnityHelper.RepaintEditorWindow<Settings>();
+                UnityHelper.RepaintEditorWindow(typeof(Settings));
             });
         }
 
@@ -108,7 +103,7 @@ namespace Thry
             {
                 return false;
             }
-            m.location_data = Parser.Deserialize<ModuleLocationData>(data);
+            m.location_data = Parser.ParseToObject<ModuleLocationData>(data);
             if (AssetDatabase.GUIDToAssetPath(m.location_data.guid) == "")
             {
                 m.location_data = null;
@@ -134,7 +129,7 @@ namespace Thry
                 module.path = ResolveFilesToDirectory(module.available_module.files.ToArray());
                 if (string.IsNullOrEmpty(module.path) == false)
                 {
-                    module.installed_module = Parser.Deserialize<ModuleInfo>(FileHelper.ReadFileIntoString(FindModuleFilePath(module.path)));
+                    module.installed_module = Parser.ParseToObject<ModuleInfo>(FileHelper.ReadFileIntoString(FindModuleFilePath(module.path)));
                     SaveModuleLocationData(module,AssetDatabase.AssetPathToGUID(module.path));
                 }
             }
@@ -152,7 +147,9 @@ namespace Thry
                 m.path = GetModuleDirectory(m);
                 if (string.IsNullOrEmpty(m.path) == false)
                 {
-                    m.installed_module = Parser.Deserialize<ModuleInfo>(FileHelper.ReadFileIntoString(FindModuleFilePath(m.path)));
+                    Debug.Log(m.path);
+                    m.installed_module = Parser.ParseToObject<ModuleInfo>(FileHelper.ReadFileIntoString(FindModuleFilePath(m.path)));
+                    Debug.Log(m.path);
                     string calced_guid = AssetDatabase.AssetPathToGUID(m.path);
                     if (m.location_data.guid != calced_guid)
                         SaveModuleLocationData(m, calced_guid);
@@ -216,7 +213,7 @@ namespace Thry
         private static string[] ResolveFilesToDirectoryFindAllReferneces(string file_sub_path)
         {
             List<string> valid_paths = new List<string>();
-            string[] found_paths = UnityHelper.FindAssetsWithFilename(Path.GetFileName(file_sub_path)).ToArray();
+            string[] found_paths = UnityHelper.FindAssetOfFilesWithExtension(Path.GetFileName(file_sub_path)).ToArray();
             foreach (string p in found_paths)
             {
                 if (p.EndsWith(file_sub_path))
@@ -274,12 +271,12 @@ namespace Thry
 
         public static void InstallModule(string url, string id)
         {
-            WebHelper.DownloadStringASync(url, (Action<string>)delegate (string data)
+            WebHelper.DownloadStringASync(url, delegate (string data)
             {
                 Module new_module = new Module();
                 new_module.url = url;
                 new_module.id = id;
-                new_module.available_module = Parser.Deserialize<ModuleInfo>(data);
+                new_module.available_module = Parser.ParseToObject<ModuleInfo>(data);
                 InstallModule(new_module);
             });
         }
@@ -294,6 +291,14 @@ namespace Thry
         private static string InstallModuleGetTempDir(Module module)
         {
             return "temp_module_" + module.id;
+        }
+
+        private static string GetThryModulesDirectoryPath()
+        {
+            string editor_path = ShaderEditor.GetShaderEditorDirectoryPath();
+            if (editor_path == null)
+                editor_path = "Assets";
+            return editor_path+ "/thry_modules";
         }
 
         private static void InstallModuleDownloadFiles(Module module, string temp_path)
@@ -318,9 +323,9 @@ namespace Thry
 
         private static void InstallModuleFilesDownloaded(Module module, string temp_dir)
         {
-            string modules_path = "Assets/thry_modules";
+            string modules_path = GetThryModulesDirectoryPath();
             if (!Directory.Exists(modules_path))
-                AssetDatabase.CreateFolder("Assets", "thry_modules");
+                Directory.CreateDirectory(modules_path);
             string install_path = modules_path + "/" + module.id;
             module.installed_module = module.available_module;
             string guid = AssetDatabase.CreateFolder(modules_path, module.id);
